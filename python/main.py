@@ -136,8 +136,85 @@ def test_distribution(f: Callable[[], int], max_value: int, bin_count: int, samp
     # print("Bins:", *bins, sep=" ")
     print(f"Chi-square: {x}")
 
+
+def miller_rabin(n: int, rng: Callable[[], int], t: int = 20) -> bool:
+    """
+    Realiza o teste de primalidade de Miller-Rabin para determinar
+    se `n` é primo.
+
+    Retorna `False` se `n` é com certeza um número composto e `True` se
+    houver a possibilidade de `n` ser um número primo.
+    """
+
+    if n < 2:
+        return False
+    if n in (2, 3):
+        return True
+    if n % 2 == 0:
+        return False
+
+    m = n - 1
+    k = 0
+    while m % 2 == 0:
+        m //= 2
+        k += 1
+
+    # Perform k rounds of testing
+    for _ in range(t):
+        a = rng() % (n - 3) + 2
+        x = pow(a, m, n)
+
+        if x == 1 or x == n - 1:
+            continue
+
+        for _ in range(k - 1):
+            x = pow(x, 2, n)
+            if x == n - 1:
+                break
+        else:
+            return False
+
+    return True
+
+import math
+
+def is_prime(n: int):
+    if n <= 1:
+        return False
+    if n == 2:
+        return True
+    if n % 2 == 0:
+        return False
     
+    for i in range(3, int(math.sqrt(n)) + 1, 2):
+        if n % i == 0:
+            return False
+    return True
+
+
+def generate_prime(rng: Callable[[], int]) -> int:
+    n = rng()
+    if n % 2 == 0:
+        n += 1
+    while not miller_rabin(n, rng):
+        n += 2
+    return n
+
+
 if __name__ == "__main__":
-    test_lcg()
-    test_bbs()
-    test_distribution(LCG.from_output_size(32, 3), 2**32, 2**16, 1_000_000)
+    # test_lcg()
+    # test_bbs()
+    # test_distribution(LCG.from_output_size(32, 3), 2**32, 2**16, 1_000_000)
+
+
+    # seed = 3**1000
+    # lcg = LCG.from_output_size(4096, seed)
+    # for _ in range(10_000_000):
+    #     lcg()
+    # print(lcg.x)
+
+    lcg = LCG.from_output_size(2048, 3**1000)
+
+    for _ in range(10):
+        n = generate_prime(lcg)
+        print(n)
