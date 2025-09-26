@@ -122,7 +122,7 @@ impl RNG for BlumBlumShub {
 // TESTE DOS PRNGs //
 
 /// Testa a geração de números por LCG.
-fn test_lcg() {
+pub fn test_lcg() {
     let sizes = [40, 56, 80, 128, 168, 224, 256, 512, 1024, 2048, 4096];
     let seed = BigUint::from(3u32).pow(4096); 
 
@@ -160,7 +160,7 @@ fn test_lcg() {
 }
 
 /// Testa a geração de números por Blum Blum Shub.
-fn test_bbs() {
+pub fn test_bbs() {
     let sizes = [40, 56, 80, 128, 168, 224, 256, 512, 1024, 2048, 4096];
 
     for &bit_size in &sizes {
@@ -247,14 +247,122 @@ where
 }
 
 
+/// Compute the Jacobi symbol (a/n)
+/// Requires: n > 0 and odd
+fn jacobi(a: BigUint, mut n: BigUint) -> i64 {
+    // Handle edge cases and ensure n is odd and positive
+    if &n <= &uint!(0) || &n % &uint!(2) == uint!(0) {
+        return 0; // Or an error, depending on desired behavior
+    }
+    if &n == &uint!(1) {
+        return 1;
+    }
+
+    let mut a = a % &n;
+    if &a < &uint!(0) {
+        a += &n; // Ensure a is non-negative
+    }
+
+    let mut result = 1;
+
+    while &a != &uint!(0) {
+        // Property 1: (a/n) = (a mod n / n)
+        // This is handled by the initial a = a % n;
+
+        // Property 2: (2/n)
+        while &a % &uint!(2) == uint!(0) {
+            a /= uint!(2);
+            let n_mod_8 = &n % &uint!(8);
+            if n_mod_8 == uint!(3) || n_mod_8 == uint!(5) {
+                result = -result;
+            }
+        }
+        // Property 3: Quadratic Reciprocity (a/n) = (n/a) * (-1)^((a-1)/2 * (n-1)/2)
+        // Swap a and n
+        std::mem::swap(&mut a, &mut n);
+        if &a % &uint!(4) == uint!(3) && &n % &uint!(4) == uint!(3) {
+            result = -result;
+        }
+
+        // Reduce a modulo n after swapping
+        a %= &n;
+    }
+
+    if n == uint!(1) {
+        result
+    }
+    else {
+        0 // If a becomes 0 before n becomes 1, the symbol is 0 (unless n=1 initially)
+    }
+}
+
+pub fn solovay_strassen<F>(n: &BigUint, rng: &mut F, t: usize) -> bool where F: RNG {
+    // handle trivial cases
+    if *n < BigUint::from(2u32) {
+        return false;
+    }
+    if *n == BigUint::from(2u32) || *n == BigUint::from(3u32) {
+        return true;
+    }
+    if n.is_even() {
+        return false;
+    }
+
+    let exp = (n - uint!(1)) >> 1; // (n-1)/2
+
+    for _ in 0..t {
+        // Pick random a in [2, n-2]
+        let a = loop {
+            let a = rng.next() % (n - uint!(1));
+            if a >= uint!(2) { break a; }
+        };
+        // Compute gcd(a, n), if >1 then n is composite
+        if a.gcd(n) != uint!(1) {
+            return false;
+        }
+        // Compute x = a^((n-1)/2) mod n
+        let x = a.modpow(&exp, n);
+        // Compute Jacobi(a, n), but map result {-1,0,1} into BigUint mod n
+        let j = match jacobi(a.clone(), n.clone()) {
+            -1 => n - uint!(1), // -1 mod n
+             0 => return false, // gcd != 1, n composite
+             1 => uint!(1),
+             _ => unreachable!(),
+        };
+        // If x != j mod n, n is composite
+        if x != j {
+            return false;
+        }
+    }
+    true // probably prime
+}
+
+pub fn test_solovay_strassen() {
+    let mut rng = LCG::from_output_size(64, uint!(3).pow(64));
+
+    for i in 2..500_000 {
+        let i = 2*i + 1;
+        let mr = miller_rabin(&uint!(i), &mut rng, 20);
+        let ss = solovay_strassen(&uint!(i), &mut rng, 20);
+        if ss != mr {
+            println!("{} {} {}", i, ss, mr);
+        }
+    }
+}
+
+
 /// Gera um número primo aleatório utilizando o gerador de números
 /// aleatórios fornecido.
-pub fn generate_prime<F>(rng: &mut F) -> BigUint where F: RNG {
+pub fn generate_prime<F, P>(rng: &mut F, test: P) -> BigUint
+where
+    F: RNG,
+    P: Fn(&BigUint, &mut F, usize) -> bool
+{
     let mut n = rng.next();
     if &n % uint!(2) == uint!(0) {
         n += uint!(1);
     }
-    while !miller_rabin(&n, rng, 20) {
+    while !test(&n, rng, 20) {
         n += uint!(2);
     }
     return n;
@@ -263,25 +371,91 @@ pub fn generate_prime<F>(rng: &mut F) -> BigUint where F: RNG {
 
 ///
 pub fn test_primes() {
-    let sizes = [40, 56, 80, 128, 168, 224, 256, 512, 1024, 2048, /*4096*/];
-    let seed = uint!(3).pow(4000);
+    let sizes = [32768, 16384, 8192, 40, 56, 80, 128, 168, 224, 256, 512, 1024, 2048, 4096];
+    let seed = uint!(3).pow(32000);
 
     for bit_size in sizes {
         let mut rng = LCG::from_output_size(bit_size, seed.clone());
 
         for _ in 0..5 {
             let start = Instant::now();
-            let p = generate_prime(&mut rng);
+            let _p = generate_prime(&mut rng, miller_rabin);
             let duration = start.elapsed();
             let time = duration.as_secs_f64();
-            println!("| {} | {:.3} | {} |", bit_size, time*1000.0, 0);
+            println!("| Miller-Rabin | {} | {:.3} | {} |", bit_size, time*1000.0, _p);
+        }
+        for _ in 0..5 {
+            let start = Instant::now();
+            let _p = generate_prime(&mut rng, solovay_strassen);
+            let duration = start.elapsed();
+            let time = duration.as_secs_f64();
+            println!("| Solovay-Strassen | {} | {:.3} | {} |", bit_size, time*1000.0, _p);
         }
     }
 }
 
+pub fn is_prime_trial(n: &BigUint) -> bool {
+    if *n < BigUint::from(2u32) {
+        return false;
+    }
+    if *n == BigUint::from(2u32) || *n == BigUint::from(3u32) {
+        return true;
+    }
+    if n.is_even() {
+        return false;
+    }
+
+    // check divisibility up to sqrt(n)
+    let mut i = BigUint::from(3u32);
+    let limit = n.sqrt(); // requires num-integer's Roots trait
+    while &i <= &limit {
+        if n % &i == uint!(0) {
+            return false;
+        }
+        i += 2u32; // only odd divisors
+    }
+
+    true
+}
+
+pub fn test_prime_testers() {
+    let mut rng = LCG::from_output_size(32, uint!(3_i32.pow(20)));
+    let mut mh_sum = 0;
+    let mut ss_sum= 0;
+    let mut both_sum = 0;
+    for i in 1..1_000_000 {
+        let base = is_prime_trial(&uint!(i));
+        let mh = miller_rabin(&uint!(i), &mut rng, 1);
+        let ss = solovay_strassen(&uint!(i), &mut rng, 1);
+        if base != mh {
+            mh_sum += 1;
+        }
+        if base != ss {
+            ss_sum += 1;
+        }
+        if base != ss && base != mh {
+            both_sum += 1;
+        }
+        if base != ss && base != mh {
+            println!("{}, {} {}{}", i, base as u32, mh as u32, ss as u32);
+        }
+    }
+    println!("{} {} {}", mh_sum, ss_sum, both_sum);
+}
 
 pub fn main() {
-    test_lcg();
+    // for i in -10..10 {
+    //     println!("{} {}", i, ((i % 3) + 3) % 3);
+    // }
+    // test_solovay_strassen();
+
+    // for i in 1..10 {
+    //     for j in 1..10 {
+    //         println!("{} {} {}", i, j, jacobi(uint!(i), uint!(j*2 + 1)));
+    //     }
+    // }
+    // test_lcg();
     // test_bbs();
     // test_primes();
+    test_prime_testers();
 }

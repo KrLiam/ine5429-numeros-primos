@@ -119,30 +119,42 @@ def test_bbs():
         print(f"BBS, tamanho={bit_size}, tempo médio de geração={elapsed:.3f}µs")
 
 
+def plot_histogram(data, bins=10, title="Histogram", xlabel="Value", ylabel="Frequency"):
+    """
+    Generate a histogram from a list of integers.
+
+    :param data: List of integers
+    :param bins: Number of bins in the histogram
+    :param title: Title of the plot
+    """
+    plt.hist(data, bins=bins, edgecolor='black', color="darkblue", linewidth=0.25)
+    plt.title(title)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.xticks([])
+    plt.grid(axis='y', linestyle='--', alpha=0.7)
+    plt.show()
+
 @dataclass
 class Bin:
-    range: tuple[int, int]
-    freq: int
+    range: tuple[float, float]
+    freq: float
 
 def test_frequency(f: Callable[[], int], max_value: int, bin_count: int, samples: int):
     bin_size = max_value / bin_count
     bins: list[Bin] = [Bin(range=(i*bin_size, (i+1)*bin_size), freq=0) for i in range(bin_count)]
 
+    values: list[int] = []
     for _ in range(samples):
         n = f()
+        values.append(n)
         bins[int(n // bin_size)].freq += 1
     
+    # plot_histogram(values, bin_count, f"Blum Blum Shub ({samples} números pseudo-aleatórios gerados)", f"Número Gerado [0, {max_value}]", "Frequência")
+    
     # criar histograma de frequências usando `bins`
-    ranges = [f"{int(b.range[0])}-{int(b.range[1])}" for b in bins]
-    freqs = [b.freq for b in bins]
-
-    plt.bar(ranges, freqs, width=1.0)
-    plt.xticks(rotation=45, ha="right")
-    plt.xlabel("Intervalos")
-    plt.ylabel("Frequência")
-    plt.title("Histograma de Frequências")
-    plt.tight_layout()
-    plt.show()
+    # ranges = [f"{int(b.range[0])}-{int(b.range[1])}" for b in bins]
+    # freqs = [b.freq for b in bins]
 
     expected = samples / bin_count
     x = 0.0
@@ -223,7 +235,8 @@ if __name__ == "__main__":
     # test_lcg()
     # test_bbs()
     # test_distribution(LCG.from_output_size(32, 3), 2**32, 2**16, 1_000_000)
-    test_frequency(LCG.from_output_size(32, 3), 2**32, 2**16, 1_000)
+    test_frequency(LCG.from_output_size(32, 3), 2**32, 100, 1_000_000)
+    test_frequency(BlumBlumShub(PRIMES[0], PRIMES[1], PRIMES[2]*PRIMES[3]), 2**32, 100, 1_000_000)
 
 
     # seed = 3**1000
