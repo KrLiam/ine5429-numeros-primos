@@ -1,9 +1,11 @@
 
 
 from cmath import log
+from dataclasses import dataclass
 from math import ceil
 from time import time
 from typing import Callable
+import matplotlib.pyplot as plt
 
 
 class LCG:
@@ -117,21 +119,37 @@ def test_bbs():
         print(f"BBS, tamanho={bit_size}, tempo médio de geração={elapsed:.3f}µs")
 
 
-def test_frequency():
-    ...
+@dataclass
+class Bin:
+    range: tuple[int, int]
+    freq: int
 
-def test_distribution(f: Callable[[], int], max_value: int, bin_count: int, samples: int):
-    bins: list[int] = [0 for _ in range(bin_count)]
+def test_frequency(f: Callable[[], int], max_value: int, bin_count: int, samples: int):
     bin_size = max_value / bin_count
+    bins: list[Bin] = [Bin(range=(i*bin_size, (i+1)*bin_size), freq=0) for i in range(bin_count)]
 
     for _ in range(samples):
         n = f()
-        bins[int(n // bin_size)] += 1
+        bins[int(n // bin_size)].freq += 1
     
+    # criar histograma de frequências usando `bins`
+    ranges = [f"{int(b.range[0])}-{int(b.range[1])}" for b in bins]
+    freqs = [b.freq for b in bins]
+
+    plt.bar(ranges, freqs, width=1.0)
+    plt.xticks(rotation=45, ha="right")
+    plt.xlabel("Intervalos")
+    plt.ylabel("Frequência")
+    plt.title("Histograma de Frequências")
+    plt.tight_layout()
+    plt.show()
+
     expected = samples / bin_count
     x = 0.0
     for observed in bins:
-        x += (observed - expected)**2 / expected
+        x += (observed.freq - expected)**2 / expected
+
+
     
     # print("Bins:", *bins, sep=" ")
     print(f"Chi-square: {x}")
@@ -205,6 +223,7 @@ if __name__ == "__main__":
     # test_lcg()
     # test_bbs()
     # test_distribution(LCG.from_output_size(32, 3), 2**32, 2**16, 1_000_000)
+    test_frequency(LCG.from_output_size(32, 3), 2**32, 2**16, 1_000)
 
 
     # seed = 3**1000
@@ -213,8 +232,8 @@ if __name__ == "__main__":
     #     lcg()
     # print(lcg.x)
 
-    lcg = LCG.from_output_size(2048, 3**1000)
+    # lcg = LCG.from_output_size(2048, 3**1000)
 
-    for _ in range(10):
-        n = generate_prime(lcg)
-        print(n)
+    # for _ in range(10):
+    #     n = generate_prime(lcg)
+    #     print(n)
