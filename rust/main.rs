@@ -206,6 +206,59 @@ pub fn test_bbs() {
     }
 }
 
+/// Conta a quantidade de 0s e 1s de `n` sendo um inteiro de `size` bits.
+pub fn count_digits(mut n: BigUint, size: u32) -> (u32, u32) {
+    let mut zeroes = 0;
+    let mut ones = 0;
+    for _ in 0..size {
+        if &n % uint!(2) == uint!(0) {
+            zeroes += 1;
+        }
+        else {
+            ones += 1;
+        }
+        n /= uint!(2);
+    }
+    (zeroes, ones)
+}
+
+/// Realiza o teste de frequência de 0s e 1s em números pseudo-aleatórios gerados
+/// pelo dois algoritmos estudados.
+pub fn test_digit_frequency() {
+    let sizes = [40, 56, 80, 128, 168, 224, 256, 512, 1024, 2048, 4096];
+
+    println!("| Algoritmo | Tamanho em bits | Proporção de 0s | Proporção de 1s |");
+
+    for &bit_size in &sizes {
+        let mut lcg: LCG = LCG::from_output_size(bit_size, uint!(3).pow(bit_size as u32));
+        let (mut zeroes, mut ones) = (0, 0);
+        // calcula a contagem média de 1000 numeros gerados
+        for _ in 0..1_000 {
+            let (z, o) = count_digits(lcg.next(), bit_size);
+            zeroes += z;
+            ones += o;
+        }
+        let max = (bit_size*1_000) as f64; 
+        println!("| LCG | {} | {:.5} | {:.5} |", bit_size, zeroes as f64 / max, ones as f64 / max);
+
+        let mut bbs = BlumBlumShub::new(
+            &uint!(50599), 
+            &uint!(51347), 
+            &(uint!(46567)*uint!(41183)),
+            bit_size as usize
+        );
+        let (mut zeroes, mut ones) = (0, 0);
+        // calcula a contagem média de 1000 numeros gerados
+        for _ in 0..1_000 {
+            let (z, o) = count_digits(bbs.next(), bit_size);
+            zeroes += z;
+            ones += o;
+        }
+        let max = (bit_size*1_000) as f64; 
+        println!("| BBS | {} | {:.5} | {:.5} |", bit_size, zeroes as f64 / max, ones as f64 / max);
+    }
+}
+
 
 // MÉTODOS DE VERIFICAÇÃO DE PRIMALIDADE //
 
@@ -470,6 +523,7 @@ pub fn test_prime_testers() {
 }
 
 pub fn main() {
+    test_digit_frequency();
     test_lcg();
     test_bbs();
     test_primes();
